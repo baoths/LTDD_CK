@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App Name -->
+    <string name="app_name">Task Manager</string>
+    
+    <!-- Login Screen -->
+    <string name="login_title">Đăng Nhập</string>
+    <string name="login_subtitle">Chào mừng bạn trở lại!</string>
+    <string name="hint_email">Email</string>
+    <string name="hint_password">Mật khẩu</string>
+    <string name="btn_login">Đăng Nhập</string>
+    <string name="text_no_account">Chưa có tài khoản?</string>
+    <string name="text_register_now">Đăng ký ngay</string>
+    <string name="text_forgot_password">Quên mật khẩu?</string>
+    
+    <!-- Register Screen -->
+    <string name="register_title">Đăng Ký</string>
+    <string name="register_subtitle">Tạo tài khoản mới</string>
+    <string name="hint_username">Tên người dùng</string>
+    <string name="hint_confirm_password">Xác nhận mật khẩu</string>
+    <string name="btn_register">Đăng Ký</string>
+    <string name="text_have_account">Đã có tài khoản?</string>
+    <string name="text_login_now">Đăng nhập ngay</string>
+    
+    <!-- Main Screen -->
+    <string name="main_title">Công Việc Của Tôi</string>
+    <string name="btn_add_task">Thêm Task</string>
+    <string name="text_welcome">Xin chào, %1$s!</string>
+    <string name="text_no_tasks">Bạn chưa có công việc nào</string>
+    <string name="btn_logout">Đăng Xuất</string>
+    
+    <!-- Task Status -->
+    <string name="status_pending">Chờ xử lý</string>
+    <string name="status_in_progress">Đang thực hiện</string>
+    <string name="status_completed">Hoàn thành</string>
+    
+    <!-- Error Messages -->
+    <string name="error_empty_email">Vui lòng nhập email</string>
+    <string name="error_empty_password">Vui lòng nhập mật khẩu</string>
+    <string name="error_empty_username">Vui lòng nhập tên người dùng</string>
+    <string name="error_invalid_email">Email không hợp lệ</string>
+    <string name="error_password_short">Mật khẩu phải có ít nhất 6 ký tự</string>
+    <string name="error_password_mismatch">Mật khẩu xác nhận không khớp</string>
+    <string name="error_login_failed">Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.</string>
+    <string name="error_register_failed">Đăng ký thất bại. Vui lòng thử lại.</string>
+    <string name="error_email_exists">Email đã được sử dụng</string>
+    <string name="error_connection">Không thể kết nối đến máy chủ</string>
+    
+    <!-- Success Messages -->
+    <string name="success_register">Đăng ký thành công!</string>
+    <string name="success_login">Đăng nhập thành công!</string>
+    <string name="success_task_created">Tạo công việc thành công!</string>
+    <string name="success_task_updated">Cập nhật công việc thành công!</string>
+    <string name="success_task_deleted">Xóa công việc thành công!</string>
+    
+    <!-- Dialog -->
+    <string name="dialog_confirm">Xác nhận</string>
+    <string name="dialog_cancel">Hủy</string>
+    <string name="dialog_delete_task">Bạn có chắc muốn xóa công việc này?</string>
+    <string name="dialog_logout">Bạn có chắc muốn đăng xuất?</string>
+    
+    <!-- Loading -->
+    <string name="loading">Đang xử lý...</string>
+    
+    <!-- Priority -->
+    <string name="priority_high">Cao</string>
+    <string name="priority_medium">Trung bình</string>
+    <string name="priority_low">Thấp</string>
+    <string name="label_priority">Mức độ ưu tiên</string>
+    
+    <!-- Task Detail -->
+    <string name="task_detail_title">Chi tiết công việc</string>
+    <string name="label_title">Tiêu đề</string>
+    <string name="label_description">Mô tả</string>
+    <string name="label_status">Trạng thái</string>
+    <string name="label_due_date">Ngày hết hạn</string>
+    <string name="label_created_at">Ngày tạo</string>
+    <string name="btn_edit">Chỉnh sửa</string>
+    <string name="btn_mark_complete">Đánh dấu hoàn thành</string>
+    <string name="btn_delete">Xóa</string>
+    <string name="no_description">Không có mô tả</string>
+    <string name="no_due_date">Chưa đặt</string>
+    
+    <!-- Edit Task -->
+    <string name="edit_task_title">Chỉnh sửa công việc</string>
+    <string name="btn_save">Lưu thay đổi</string>
+</resources>
