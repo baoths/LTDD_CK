@@ -2,16 +2,23 @@ package com.example.ktck_android_k17.service;
 
 import android.util.Log;
 
+import com.example.ktck_android_k17.adapter.TaskAdapter;
 import com.example.ktck_android_k17.dao.TaskDAO;
+import com.example.ktck_android_k17.dao.TaskExceptionDAO;
 import com.example.ktck_android_k17.dao.TaskRecurrenceDAO;
+import com.example.ktck_android_k17.dto.TaskDTO;
 import com.example.ktck_android_k17.model.Task;
+import com.example.ktck_android_k17.model.TaskException;
 import com.example.ktck_android_k17.model.TaskRecurrence;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Service để xử lý việc tạo task tự động dựa trên recurrence pattern.
@@ -21,129 +28,154 @@ public class TaskRecurrenceService {
     private static final String TAG = "TaskRecurrenceService";
     private TaskDAO taskDAO;
     private TaskRecurrenceDAO recurrenceDAO;
+    private TaskExceptionDAO exceptionDAO;
 
     public TaskRecurrenceService() {
         taskDAO = new TaskDAO();
         recurrenceDAO = new TaskRecurrenceDAO();
+        exceptionDAO = new TaskExceptionDAO();
     }
 
     /**
      * Kiểm tra và tạo các task mới dựa trên recurrence patterns.
-     * Nên được gọi khi app khởi động hoặc định kỳ.
-     * DEPRECATED: Sử dụng generateAllRecurringInstances() thay thế.
+     * DEPRECATED: Không còn sử dụng vì instances được generate động khi hiển thị.
      */
     public void checkAndGenerateRecurringTasks() {
-        Log.d(TAG, "Bắt đầu kiểm tra recurring tasks...");
-        
-        List<TaskRecurrence> activeRecurrences = recurrenceDAO.findActiveRecurrences();
-        Log.d(TAG, "Tìm thấy " + activeRecurrences.size() + " recurring patterns đang active");
-
-        for (TaskRecurrence recurrence : activeRecurrences) {
-            try {
-                checkAndGenerateTask(recurrence);
-            } catch (Exception e) {
-                Log.e(TAG, "Lỗi khi xử lý recurrence cho task " + recurrence.getTaskId() + ": " + e.getMessage(), e);
-            }
-        }
+        // No longer needed - instances are generated dynamically in MainActivity
+        Log.d(TAG, "checkAndGenerateRecurringTasks() is deprecated - instances are generated dynamically");
     }
 
     /**
-     * Tạo tất cả task instances ngay lập tức từ startDate đến recurrenceEndDate.
-     * 
-     * @param recurrence TaskRecurrence pattern
+     * Generate instances động trong date range cho một master task.
+     * Không tạo instances trong database, chỉ tính toán và trả về TaskDTOs.
+     * Kiểm tra exceptions trước khi generate.
+     *
+     * @param masterTask Master task với recurrence rule
+     * @param startDate  Ngày bắt đầu (yyyy-MM-dd)
+     * @param endDate    Ngày kết thúc (yyyy-MM-dd)
+     * @return Danh sách TaskDTO instances
      */
-    public void generateAllRecurringInstances(TaskRecurrence recurrence) {
-        Log.d(TAG, "Bắt đầu tạo tất cả instances cho recurrence " + recurrence.getId());
+    public List<TaskDTO> generateInstancesInRange(Task masterTask, String startDate, String endDate) {
+        Log.d(TAG, "Generate instances cho master task " + masterTask.getId() + " từ " + startDate + " đến " + endDate);
         
-        // Lấy task gốc
-        Task originalTask = taskDAO.findById(recurrence.getTaskId());
-        if (originalTask == null) {
-            Log.w(TAG, "Task gốc không tồn tại: " + recurrence.getTaskId());
-            return;
+        List<TaskDTO> instances = new ArrayList<>();
+        
+        // Lấy recurrence rule
+        TaskRecurrence recurrence = recurrenceDAO.findByTaskId(masterTask.getId());
+        if (recurrence == null || !recurrence.isActive()) {
+            Log.w(TAG, "Không tìm thấy recurrence rule hoặc đã inactive cho task " + masterTask.getId());
+            return instances;
         }
 
-        // Xác định startDate và endDate
-        String startDate = originalTask.getStartDate();
-        if (startDate == null || startDate.isEmpty()) {
-            // Nếu không có startDate, dùng dueDate hoặc ngày hiện tại
-            startDate = originalTask.getDueDate();
-            if (startDate == null || startDate.isEmpty()) {
-                startDate = getTodayDateString();
+        // Lấy tất cả exceptions của master task
+        List<TaskException> exceptions = exceptionDAO.findByMasterTaskId(masterTask.getId());
+        Map<String, TaskException> exceptionMap = new HashMap<>();
+        for (TaskException ex : exceptions) {
+            exceptionMap.put(ex.getOriginalOccurrenceDate(), ex);
+        }
+
+        // Tính toán các occurrence dates
+        List<String> occurrenceDates = calculateOccurrences(recurrence, startDate, endDate);
+        
+        // Tạo TaskDTO cho mỗi occurrence date
+        for (String occurrenceDate : occurrenceDates) {
+            // Kiểm tra xem có exception không
+            TaskException exception = exceptionMap.get(occurrenceDate);
+            
+            if (exception != null) {
+                // Có exception
+                if (TaskException.TYPE_DELETED.equals(exception.getExceptionType())) {
+                    // Instance bị xóa, bỏ qua
+                    continue;
+                } else if (TaskException.TYPE_MODIFIED.equals(exception.getExceptionType()) && exception.getModifiedTaskId() != null) {
+                    // Instance bị chỉnh sửa, load task đã chỉnh sửa
+                    Task modifiedTask = taskDAO.findById(exception.getModifiedTaskId());
+                    if (modifiedTask != null) {
+                        TaskDTO dto = TaskAdapter.toDTO(modifiedTask);
+                        dto.setParentTaskId(masterTask.getId());
+                        dto.setOccurrenceDate(occurrenceDate);
+                        instances.add(dto);
+                    }
+                }
+            } else {
+                // Không có exception, tạo instance từ master task
+                TaskDTO instanceDTO = createInstanceDTO(masterTask, occurrenceDate, recurrence);
+                instances.add(instanceDTO);
             }
         }
 
-        String endDate = recurrence.getRecurrenceEndDate();
-        if (endDate == null || endDate.isEmpty()) {
-            // Nếu không có recurrenceEndDate, set mặc định là startDate + 1 năm
-            try {
-                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-                Calendar cal = Calendar.getInstance();
-                cal.setTime(sdf.parse(startDate));
-                cal.add(Calendar.YEAR, 1);
-                endDate = sdf.format(cal.getTime());
-                Log.d(TAG, "Không có recurrenceEndDate, set mặc định: " + endDate);
-            } catch (Exception e) {
-                Log.e(TAG, "Lỗi tính toán endDate mặc định: " + e.getMessage());
-                return;
-            }
+        Log.d(TAG, "Đã generate " + instances.size() + " instances");
+        return instances;
+    }
+
+    /**
+     * Tạo TaskDTO cho một instance từ master task.
+     */
+    private TaskDTO createInstanceDTO(Task masterTask, String occurrenceDate, TaskRecurrence recurrence) {
+        TaskDTO dto = TaskAdapter.toDTO(masterTask);
+        dto.setId(0); // Virtual instance, không có ID trong database
+        dto.setParentTaskId(masterTask.getId());
+        dto.setIsRecurringMaster(false);
+        dto.setOccurrenceDate(occurrenceDate);
+        dto.setDueDate(occurrenceDate); // dueDate = occurrenceDate cho instance
+        
+        // Set recurrence info
+        String recurrenceInfo = formatRecurrenceInfo(recurrence);
+        dto.setRecurrenceInfo(recurrenceInfo);
+        
+        return dto;
+    }
+
+    /**
+     * Format recurrence info thành chuỗi dễ đọc (VD: "Mỗi thứ 2, 4, 6").
+     */
+    private String formatRecurrenceInfo(TaskRecurrence recurrence) {
+        String type = recurrence.getRecurrenceType();
+        int interval = recurrence.getRecurrenceInterval();
+        
+        switch (type) {
+            case TaskRecurrence.TYPE_DAILY:
+                if (interval == 1) {
+                    return "Hàng ngày";
+                } else {
+                    return "Mỗi " + interval + " ngày";
+                }
+            case TaskRecurrence.TYPE_WEEKLY:
+                if (recurrence.getRecurrenceDays() != null && !recurrence.getRecurrenceDays().isEmpty()) {
+                    String[] days = recurrence.getRecurrenceDays().split(",");
+                    String[] dayNames = {"Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"};
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < days.length; i++) {
+                        if (i > 0) sb.append(", ");
+                        int dayNum = Integer.parseInt(days[i].trim());
+                        if (dayNum >= 1 && dayNum <= 7) {
+                            sb.append(dayNames[dayNum - 1]);
+                        }
+                    }
+                    return "Mỗi " + sb.toString();
+                } else {
+                    return interval == 1 ? "Hàng tuần" : "Mỗi " + interval + " tuần";
+                }
+            case TaskRecurrence.TYPE_MONTHLY:
+                if (recurrence.getRecurrenceDayOfMonth() != null) {
+                    return "Ngày " + recurrence.getRecurrenceDayOfMonth() + " hàng tháng";
+                } else {
+                    return interval == 1 ? "Hàng tháng" : "Mỗi " + interval + " tháng";
+                }
+            case TaskRecurrence.TYPE_CUSTOM:
+                return "Tùy chỉnh";
+            default:
+                return "Lặp lại";
         }
-
-        // Validate startDate < endDate
-        if (startDate.compareTo(endDate) >= 0) {
-            Log.e(TAG, "startDate (" + startDate + ") phải nhỏ hơn endDate (" + endDate + ")");
-            return;
-        }
-
-        // Tính toán tất cả các ngày từ startDate đến endDate
-        List<String> allDates = calculateAllOccurrenceDates(recurrence, startDate, endDate);
-        Log.d(TAG, "Sẽ tạo " + allDates.size() + " task instances");
-
-        // Tạo task instance cho mỗi ngày
-        int createdCount = 0;
-        for (String date : allDates) {
-            try {
-                createRecurringTaskInstance(originalTask, recurrence, date, endDate);
-                createdCount++;
-            } catch (Exception e) {
-                Log.e(TAG, "Lỗi khi tạo task instance cho ngày " + date + ": " + e.getMessage());
-            }
-        }
-
-        Log.d(TAG, "Đã tạo " + createdCount + " task instances thành công");
     }
 
     /**
      * Kiểm tra và tạo task mới cho một recurrence pattern cụ thể.
+     * DEPRECATED: Không còn sử dụng vì instances được generate động.
      */
     private void checkAndGenerateTask(TaskRecurrence recurrence) {
-        // Lấy task gốc
-        Task originalTask = taskDAO.findById(recurrence.getTaskId());
-        if (originalTask == null) {
-            Log.w(TAG, "Task gốc không tồn tại: " + recurrence.getTaskId());
-            recurrenceDAO.deactivate(recurrence.getId());
-            return;
-        }
-
-        // Kiểm tra xem có cần tạo task mới không
-        String nextDate = calculateNextOccurrenceDate(recurrence);
-        if (nextDate == null) {
-            Log.d(TAG, "Recurrence đã hết hạn hoặc đạt giới hạn: " + recurrence.getId());
-            recurrenceDAO.deactivate(recurrence.getId());
-            return;
-        }
-
-        // Kiểm tra xem đã đến ngày tạo task chưa
-        String today = getTodayDateString();
-        if (nextDate.compareTo(today) <= 0) {
-            // Cần tạo task mới
-            createRecurringTaskInstance(originalTask, recurrence, nextDate);
-            
-            // Cập nhật last_generated_date
-            recurrence.setLastGeneratedDate(nextDate);
-            recurrenceDAO.update(recurrence);
-            
-            Log.d(TAG, "Đã tạo task mới từ recurrence " + recurrence.getId() + " cho ngày " + nextDate);
-        }
+        // No longer needed - instances are generated dynamically
+        Log.d(TAG, "checkAndGenerateTask() is deprecated");
     }
 
     /**
@@ -287,9 +319,14 @@ public class TaskRecurrenceService {
     }
 
     /**
-     * Tính toán tất cả các ngày occurrence từ startDate đến endDate.
+     * Tính toán các ngày occurrence từ startDate đến endDate dựa trên recurrence rule.
+     * 
+     * @param recurrence Recurrence rule
+     * @param startDate  Ngày bắt đầu (yyyy-MM-dd)
+     * @param endDate    Ngày kết thúc (yyyy-MM-dd)
+     * @return Danh sách các ngày occurrence
      */
-    private List<String> calculateAllOccurrenceDates(TaskRecurrence recurrence, String startDate, String endDate) {
+    public List<String> calculateOccurrences(TaskRecurrence recurrence, String startDate, String endDate) {
         List<String> dates = new java.util.ArrayList<>();
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
 
@@ -348,54 +385,111 @@ public class TaskRecurrenceService {
     }
 
     /**
-     * Tạo một instance mới của task dựa trên task gốc và recurrence.
+     * Tạo exception khi user chỉnh sửa riêng một instance.
+     *
+     * @param masterTaskId      ID của master task
+     * @param occurrenceDate    Ngày occurrence bị chỉnh sửa (yyyy-MM-dd)
+     * @param modifiedTask      Task đã được chỉnh sửa (nếu null thì exception type là 'deleted')
+     * @return true nếu thành công
      */
-    private void createRecurringTaskInstance(Task originalTask, TaskRecurrence recurrence, String startDate, String endDate) {
-        // Validate startDate < endDate
-        if (startDate.compareTo(endDate) >= 0) {
-            Log.w(TAG, "Bỏ qua instance: startDate (" + startDate + ") >= endDate (" + endDate + ")");
-            return;
-        }
-
-        Task newTask = new Task();
-        newTask.setUserId(originalTask.getUserId());
-        newTask.setCategoryId(originalTask.getCategoryId());
-        newTask.setTitle(originalTask.getTitle());
-        newTask.setDescription(originalTask.getDescription());
-        newTask.setStatus(Task.STATUS_PENDING); // Task mới luôn là pending
-        newTask.setPriority(originalTask.getPriority());
-        newTask.setDueDate(startDate); // dueDate = startDate của instance này
-        newTask.setStartDate(startDate);
-        newTask.setEndDate(endDate); // endDate = recurrenceEndDate
-
-        // Insert task mới
-        int newTaskId = taskDAO.insertAndGetId(newTask);
-        if (newTaskId > 0) {
-            Log.d(TAG, "Đã tạo task mới với ID: " + newTaskId + ", startDate: " + startDate + ", endDate: " + endDate);
+    public boolean createException(int masterTaskId, String occurrenceDate, Task modifiedTask) {
+        Log.d(TAG, "Tạo exception cho master task " + masterTaskId + ", occurrence: " + occurrenceDate);
+        
+        String exceptionType;
+        Integer modifiedTaskId = null;
+        
+        if (modifiedTask != null) {
+            exceptionType = TaskException.TYPE_MODIFIED;
+            // Lưu modified task vào database
+            modifiedTask.setParentTaskId(masterTaskId);
+            modifiedTask.setIsMaster(false);
+            modifiedTask.setOccurrenceDate(occurrenceDate);
+            modifiedTaskId = taskDAO.insertAndGetId(modifiedTask);
+            if (modifiedTaskId <= 0) {
+                Log.e(TAG, "Không thể tạo modified task");
+                return false;
+            }
         } else {
-            Log.e(TAG, "Không thể tạo task mới từ recurrence");
+            exceptionType = TaskException.TYPE_DELETED;
         }
+        
+        // Tạo exception record
+        TaskException exception = new TaskException(masterTaskId, occurrenceDate, exceptionType);
+        exception.setModifiedTaskId(modifiedTaskId);
+        
+        return exceptionDAO.insert(exception);
     }
 
     /**
-     * Tạo một instance mới của task dựa trên task gốc và recurrence (backward compatibility).
+     * Split recurrence khi user chọn "Từ lần này trở đi".
+     * Cắt recurrence cũ trước splitDate và tạo recurrence mới từ splitDate.
+     *
+     * @param masterTaskId ID của master task
+     * @param splitDate     Ngày split (yyyy-MM-dd)
+     * @return true nếu thành công
      */
-    private void createRecurringTaskInstance(Task originalTask, TaskRecurrence recurrence, String dueDate) {
-        // For backward compatibility, use dueDate as startDate and recurrenceEndDate as endDate
-        String endDate = recurrence.getRecurrenceEndDate();
-        if (endDate == null || endDate.isEmpty()) {
-            // Set default endDate = startDate + 1 day
-            try {
-                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-                Calendar cal = Calendar.getInstance();
-                cal.setTime(sdf.parse(dueDate));
-                cal.add(Calendar.DAY_OF_MONTH, 1);
-                endDate = sdf.format(cal.getTime());
-            } catch (Exception e) {
-                endDate = dueDate; // Fallback
-            }
+    public boolean splitRecurrence(int masterTaskId, String splitDate) {
+        Log.d(TAG, "Split recurrence cho master task " + masterTaskId + " tại ngày " + splitDate);
+        
+        // Lấy recurrence hiện tại
+        TaskRecurrence oldRecurrence = recurrenceDAO.findByTaskId(masterTaskId);
+        if (oldRecurrence == null) {
+            Log.e(TAG, "Không tìm thấy recurrence cho task " + masterTaskId);
+            return false;
         }
-        createRecurringTaskInstance(originalTask, recurrence, dueDate, endDate);
+        
+        // Cập nhật recurrence cũ: set endDate = splitDate - 1 day
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+            Calendar cal = Calendar.getInstance();
+            cal.setTime(sdf.parse(splitDate));
+            cal.add(Calendar.DAY_OF_MONTH, -1);
+            String oldEndDate = sdf.format(cal.getTime());
+            
+            oldRecurrence.setRecurrenceEndDate(oldEndDate);
+            recurrenceDAO.update(oldRecurrence);
+            
+            // Tạo master task mới từ splitDate
+            Task oldMasterTask = taskDAO.findById(masterTaskId);
+            if (oldMasterTask == null) {
+                Log.e(TAG, "Không tìm thấy master task " + masterTaskId);
+                return false;
+            }
+            
+            Task newMasterTask = new Task();
+            newMasterTask.setUserId(oldMasterTask.getUserId());
+            newMasterTask.setCategoryId(oldMasterTask.getCategoryId());
+            newMasterTask.setTitle(oldMasterTask.getTitle());
+            newMasterTask.setDescription(oldMasterTask.getDescription());
+            newMasterTask.setStatus(oldMasterTask.getStatus());
+            newMasterTask.setPriority(oldMasterTask.getPriority());
+            newMasterTask.setDueDate(splitDate);
+            newMasterTask.setStartDate(splitDate);
+            newMasterTask.setIsMaster(true);
+            
+            int newMasterTaskId = taskDAO.insertAndGetId(newMasterTask);
+            if (newMasterTaskId <= 0) {
+                Log.e(TAG, "Không thể tạo master task mới");
+                return false;
+            }
+            
+            // Tạo recurrence mới cho master task mới
+            TaskRecurrence newRecurrence = new TaskRecurrence();
+            newRecurrence.setTaskId(newMasterTaskId);
+            newRecurrence.setRecurrenceType(oldRecurrence.getRecurrenceType());
+            newRecurrence.setRecurrenceInterval(oldRecurrence.getRecurrenceInterval());
+            newRecurrence.setRecurrenceDays(oldRecurrence.getRecurrenceDays());
+            newRecurrence.setRecurrenceDayOfMonth(oldRecurrence.getRecurrenceDayOfMonth());
+            newRecurrence.setRecurrenceEndDate(oldRecurrence.getRecurrenceEndDate()); // Giữ nguyên end date
+            newRecurrence.setRecurrenceCount(oldRecurrence.getRecurrenceCount());
+            newRecurrence.setActive(true);
+            
+            return recurrenceDAO.insert(newRecurrence);
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Lỗi khi split recurrence: " + e.getMessage(), e);
+            return false;
+        }
     }
 
     /**

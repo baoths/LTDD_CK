@@ -171,14 +171,30 @@ public class KanbanTaskAdapter extends RecyclerView.Adapter<KanbanTaskAdapter.Ka
                 }
             }
 
-            // Category badge
+            // Category badge or recurrence indicator
             if (tvCategory != null) {
-                String categoryName = task.getCategoryName();
-                if (categoryName != null && !categoryName.isEmpty()) {
-                    tvCategory.setText(categoryName);
+                if (task.getIsRecurringMaster() != null && task.getIsRecurringMaster()) {
+                    // Show recurrence indicator for master task
+                    String recurrenceInfo = task.getRecurrenceInfo();
+                    if (recurrenceInfo != null && !recurrenceInfo.isEmpty()) {
+                        tvCategory.setText("🔄 " + recurrenceInfo);
+                    } else {
+                        tvCategory.setText("🔄 Lặp lại");
+                    }
+                    tvCategory.setVisibility(View.VISIBLE);
+                } else if (task.getParentTaskId() != null && task.getParentTaskId() > 0) {
+                    // Show instance indicator
+                    tvCategory.setText("📋 Instance");
                     tvCategory.setVisibility(View.VISIBLE);
                 } else {
-                    tvCategory.setVisibility(View.GONE);
+                    // Show category for normal tasks
+                    String categoryName = task.getCategoryName();
+                    if (categoryName != null && !categoryName.isEmpty()) {
+                        tvCategory.setText(categoryName);
+                        tvCategory.setVisibility(View.VISIBLE);
+                    } else {
+                        tvCategory.setVisibility(View.GONE);
+                    }
                 }
             }
 

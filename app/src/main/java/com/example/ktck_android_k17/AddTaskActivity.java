@@ -425,6 +425,29 @@ public class AddTaskActivity extends AppCompatActivity {
         task.setStatus(status);
         task.setPriority(priority);
         task.setDueDate(dueDateForDb);
+        
+        // Set isMaster = true if recurrence is enabled
+        if (switchRecurrence != null && switchRecurrence.isChecked()) {
+            task.setIsMaster(true);
+            // Set startDate = dueDate for recurring task
+            task.setStartDate(dueDateForDb);
+            // Set endDate from recurrence end date if provided
+            if (edtRecurrenceEndDate != null) {
+                String endDateStr = edtRecurrenceEndDate.getText().toString().trim();
+                if (!endDateStr.isEmpty()) {
+                    try {
+                        SimpleDateFormat displayFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
+                        SimpleDateFormat dbFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+                        java.util.Date date = displayFormat.parse(endDateStr);
+                        if (date != null) {
+                            task.setEndDate(dbFormat.format(date));
+                        }
+                    } catch (Exception e) {
+                        // Ignore parsing errors
+                    }
+                }
+            }
+        }
 
         String finalReminderTimeForDb = reminderTimeForDb;
         executorService.execute(() -> {
@@ -586,9 +609,8 @@ public class AddTaskActivity extends AppCompatActivity {
         
         taskRecurrenceDAO.insert(recurrence);
         
-        // Generate all recurring instances immediately
-        TaskRecurrenceService recurrenceService = new TaskRecurrenceService();
-        recurrenceService.generateAllRecurringInstances(recurrence);
+        // Note: Không còn generate instances ngay lập tức
+        // Instances sẽ được generate động khi hiển thị trong MainActivity
     }
 
     private void showLoading(boolean show) {

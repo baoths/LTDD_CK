@@ -240,13 +240,33 @@ public class TaskListAdapter extends RecyclerView.Adapter<TaskListAdapter.TaskVi
                 }
             }
 
-            // Display category
-            if (tvCategory != null) {
-                if (task.getCategoryName() != null && !task.getCategoryName().isEmpty()) {
-                    tvCategory.setText("📁 " + task.getCategoryName());
+            // Display recurrence indicator for master task
+            if (task.getIsRecurringMaster() != null && task.getIsRecurringMaster()) {
+                // Show recurrence badge
+                if (tvCategory != null) {
+                    String recurrenceInfo = task.getRecurrenceInfo();
+                    if (recurrenceInfo != null && !recurrenceInfo.isEmpty()) {
+                        tvCategory.setText("🔄 " + recurrenceInfo);
+                    } else {
+                        tvCategory.setText("🔄 Lặp lại");
+                    }
                     tvCategory.setVisibility(View.VISIBLE);
-                } else {
-                    tvCategory.setVisibility(View.GONE);
+                }
+            } else if (task.getParentTaskId() != null && task.getParentTaskId() > 0) {
+                // Show instance indicator
+                if (tvCategory != null) {
+                    tvCategory.setText("📋 Instance");
+                    tvCategory.setVisibility(View.VISIBLE);
+                }
+            } else {
+                // Display category for normal tasks
+                if (tvCategory != null) {
+                    if (task.getCategoryName() != null && !task.getCategoryName().isEmpty()) {
+                        tvCategory.setText("📁 " + task.getCategoryName());
+                        tvCategory.setVisibility(View.VISIBLE);
+                    } else {
+                        tvCategory.setVisibility(View.GONE);
+                    }
                 }
             }
 

@@ -21,6 +21,7 @@ import com.example.ktck_android_k17.dao.CategoryDAO;
 import com.example.ktck_android_k17.dao.TaskDAO;
 import com.example.ktck_android_k17.dao.TaskRecurrenceDAO;
 import com.example.ktck_android_k17.dao.TaskReminderDAO;
+import com.example.ktck_android_k17.dialog.RecurrenceEditDialog;
 import com.example.ktck_android_k17.service.TaskRecurrenceService;
 // TaskTagDAO removed - tags no longer supported
 import com.example.ktck_android_k17.model.Category;
@@ -428,7 +429,13 @@ public class EditTaskActivity extends AppCompatActivity {
 
     private void loadExistingReminders(int taskId) {
         executorService.execute(() -> {
-            List<TaskReminder> reminders = taskReminderDAO.findByTaskId(taskId);
+            // If this is an instance task, load reminders from master task (parentTaskId)
+            int taskIdToLoad = taskId;
+            if (currentTask != null && currentTask.getParentTaskId() != null && currentTask.getParentTaskId() > 0) {
+                taskIdToLoad = currentTask.getParentTaskId();
+            }
+            
+            List<TaskReminder> reminders = taskReminderDAO.findByTaskId(taskIdToLoad);
             mainHandler.post(() -> {
                 if (reminders != null && !reminders.isEmpty()) {
                     TaskReminder reminder = reminders.get(0); // Get first reminder
@@ -459,7 +466,13 @@ public class EditTaskActivity extends AppCompatActivity {
      */
     private void loadExistingRecurrence(int taskId) {
         executorService.execute(() -> {
-            TaskRecurrence recurrence = taskRecurrenceDAO.findByTaskId(taskId);
+            // If this is an instance task, load recurrence from master task (parentTaskId)
+            int taskIdToLoad = taskId;
+            if (currentTask != null && currentTask.getParentTaskId() != null && currentTask.getParentTaskId() > 0) {
+                taskIdToLoad = currentTask.getParentTaskId();
+            }
+            
+            TaskRecurrence recurrence = taskRecurrenceDAO.findByTaskId(taskIdToLoad);
             mainHandler.post(() -> {
                 if (recurrence != null && recurrence.isActive()) {
                     // Enable recurrence section
@@ -611,6 +624,32 @@ public class EditTaskActivity extends AppCompatActivity {
     }
 
     private void saveTask() {
+        // Check if this is a recurring master task
+        if (currentTask != null && currentTask.getIsMaster() != null && currentTask.getIsMaster()) {
+            // Show dialog to choose edit option
+            showRecurrenceEditDialog();
+            return;
+        }
+        
+        // Not a recurring master, proceed with normal save
+        performSaveTask(RecurrenceEditDialog.OPTION_ALL_OCCURRENCES);
+    }
+
+    /**
+     * Show dialog to choose how to edit recurring task.
+     */
+    private void showRecurrenceEditDialog() {
+        RecurrenceEditDialog dialog = new RecurrenceEditDialog(this);
+        dialog.setOnOptionSelectedListener(option -> {
+            performSaveTask(option);
+        });
+        dialog.show();
+    }
+
+    /**
+     * Perform the actual save based on the selected option.
+     */
+    private void performSaveTask(int editOption) {
         String title = edtTitle.getText().toString().trim();
         String description = edtDescription.getText().toString().trim();
         String dueDate = edtDueDate != null ? edtDueDate.getText().toString().trim() : "";
@@ -663,48 +702,50 @@ public class EditTaskActivity extends AppCompatActivity {
         currentTask.setStatus(statusValues[statusIndex]);
 
         // Parse due date from user format (dd/MM/yyyy) to MySQL format (yyyy-MM-dd)
-        String dueDateForDb = null;
+        final String[] dueDateForDb = {null};
         if (!dueDate.isEmpty()) {
             try {
                 // Check if already in MySQL format
                 if (dueDate.matches("\\d{4}-\\d{2}-\\d{2}")) {
-                    dueDateForDb = dueDate;
+                    dueDateForDb[0] = dueDate;
                 } else {
                     // Try to parse from user format (dd/MM/yyyy)
                     SimpleDateFormat displayFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
                     SimpleDateFormat dbFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
                     java.util.Date date = displayFormat.parse(dueDate);
                     if (date != null) {
-                        dueDateForDb = dbFormat.format(date);
+                        dueDateForDb[0] = dbFormat.format(date);
                         selectedDate.setTime(date);
                     } else {
-                        dueDateForDb = dueDate; // Fallback to original
+                        dueDateForDb[0] = dueDate; // Fallback to original
                     }
                 }
             } catch (Exception e) {
                 // If parsing fails, try to use selectedDate if it was set
                 if (selectedDate != null) {
                     SimpleDateFormat dbFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-                    dueDateForDb = dbFormat.format(selectedDate.getTime());
+                    dueDateForDb[0] = dbFormat.format(selectedDate.getTime());
                 } else {
-                    dueDateForDb = dueDate; // Fallback to original
+                    dueDateForDb[0] = dueDate; // Fallback to original
                 }
             }
         }
-        currentTask.setDueDate(dueDateForDb);
+        currentTask.setDueDate(dueDateForDb[0]);
 
         // Set startDate and endDate if recurrence is enabled
+        final String[] startDateForDb = {null};
+        final String[] endDateForDb = {null};
+        
         if (switchRecurrence != null && switchRecurrence.isChecked()) {
             // startDate = dueDate (hoặc ngày hiện tại nếu không có dueDate)
-            String startDateForDb = dueDateForDb;
-            if (startDateForDb == null || startDateForDb.isEmpty()) {
+            startDateForDb[0] = dueDateForDb[0];
+            if (startDateForDb[0] == null || startDateForDb[0].isEmpty()) {
                 SimpleDateFormat sdfDb = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
-                startDateForDb = sdfDb.format(Calendar.getInstance().getTime());
+                startDateForDb[0] = sdfDb.format(Calendar.getInstance().getTime());
             }
-            currentTask.setStartDate(startDateForDb);
+            currentTask.setStartDate(startDateForDb[0]);
 
             // endDate = recurrenceEndDate (nếu có) hoặc startDate + 1 năm
-            String endDateForDb = null;
             if (edtRecurrenceEndDate != null) {
                 String endDateStr = edtRecurrenceEndDate.getText().toString().trim();
                 if (!endDateStr.isEmpty()) {
@@ -713,7 +754,7 @@ public class EditTaskActivity extends AppCompatActivity {
                         SimpleDateFormat dbFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
                         java.util.Date date = displayFormat.parse(endDateStr);
                         if (date != null) {
-                            endDateForDb = dbFormat.format(date);
+                            endDateForDb[0] = dbFormat.format(date);
                         }
                     } catch (Exception e) {
                         android.util.Log.e("EditTaskActivity", "Error parsing recurrence end date: " + e.getMessage());
@@ -722,18 +763,18 @@ public class EditTaskActivity extends AppCompatActivity {
             }
             
             // Nếu không có endDate, set mặc định = startDate + 1 năm
-            if (endDateForDb == null || endDateForDb.isEmpty()) {
+            if (endDateForDb[0] == null || endDateForDb[0].isEmpty()) {
                 try {
                     SimpleDateFormat sdfDb = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
                     Calendar cal = Calendar.getInstance();
-                    cal.setTime(sdfDb.parse(startDateForDb));
+                    cal.setTime(sdfDb.parse(startDateForDb[0]));
                     cal.add(Calendar.YEAR, 1);
-                    endDateForDb = sdfDb.format(cal.getTime());
+                    endDateForDb[0] = sdfDb.format(cal.getTime());
                 } catch (Exception e) {
-                    endDateForDb = startDateForDb; // Fallback
+                    endDateForDb[0] = startDateForDb[0]; // Fallback
                 }
             }
-            currentTask.setEndDate(endDateForDb);
+            currentTask.setEndDate(endDateForDb[0]);
         } else {
             // Nếu không có recurrence, clear startDate và endDate
             currentTask.setStartDate(null);
@@ -748,18 +789,108 @@ public class EditTaskActivity extends AppCompatActivity {
         }
 
         executorService.execute(() -> {
-            boolean success = taskDAO.update(currentTask);
-
-            if (success) {
-                // Delete old recurrence and all old instances
-                taskRecurrenceDAO.deleteByTaskId(currentTask.getId());
+            final boolean[] success = {false};
+            TaskRecurrenceService recurrenceService = new TaskRecurrenceService();
+            
+            // Handle based on edit option
+            if (currentTask.getIsMaster() != null && currentTask.getIsMaster()) {
+                // This is a recurring master task
+                switch (editOption) {
+                    case RecurrenceEditDialog.OPTION_THIS_OCCURRENCE:
+                        // Create exception for this occurrence
+                        String occurrenceDate = currentTask.getDueDate(); // Use dueDate as occurrence date
+                        Task modifiedTask = new Task();
+                        modifiedTask.setUserId(currentTask.getUserId());
+                        modifiedTask.setCategoryId(currentTask.getCategoryId());
+                        modifiedTask.setTitle(title);
+                        modifiedTask.setDescription(description.isEmpty() ? null : description);
+                        modifiedTask.setStatus(statusValues[statusIndex]);
+                        modifiedTask.setPriority(priorityValues[priorityIndex]);
+                        modifiedTask.setDueDate(currentTask.getDueDate());
+                        modifiedTask.setStartDate(currentTask.getStartDate());
+                        modifiedTask.setEndDate(currentTask.getEndDate());
+                        
+                        // Parse dueDate if changed
+                        if (!dueDate.isEmpty()) {
+                            try {
+                                SimpleDateFormat displayFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
+                                SimpleDateFormat dbFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+                                java.util.Date date = displayFormat.parse(dueDate);
+                                if (date != null) {
+                                    modifiedTask.setDueDate(dbFormat.format(date));
+                                    occurrenceDate = dbFormat.format(date);
+                                }
+                            } catch (Exception e) {
+                                // Keep original
+                            }
+                        }
+                        
+                        success[0] = recurrenceService.createException(currentTask.getId(), occurrenceDate, modifiedTask);
+                        break;
+                        
+                    case RecurrenceEditDialog.OPTION_FROM_THIS_FORWARD:
+                        // Split recurrence
+                        String splitDate = currentTask.getDueDate();
+                        if (!dueDate.isEmpty()) {
+                            try {
+                                SimpleDateFormat displayFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
+                                SimpleDateFormat dbFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+                                java.util.Date date = displayFormat.parse(dueDate);
+                                if (date != null) {
+                                    splitDate = dbFormat.format(date);
+                                }
+                            } catch (Exception e) {
+                                // Keep original
+                            }
+                        }
+                        
+                        // Update master task first
+                        currentTask.setTitle(title);
+                        currentTask.setDescription(description.isEmpty() ? null : description);
+                        currentTask.setPriority(priorityValues[priorityIndex]);
+                        currentTask.setStatus(statusValues[statusIndex]);
+                        success[0] = taskDAO.update(currentTask);
+                        
+                        if (success[0]) {
+                            success[0] = recurrenceService.splitRecurrence(currentTask.getId(), splitDate);
+                        }
+                        break;
+                        
+                    case RecurrenceEditDialog.OPTION_ALL_OCCURRENCES:
+                    default:
+                        // Update master task and recurrence rule
+                        currentTask.setTitle(title);
+                        currentTask.setDescription(description.isEmpty() ? null : description);
+                        currentTask.setPriority(priorityValues[priorityIndex]);
+                        currentTask.setStatus(statusValues[statusIndex]);
+                        success[0] = taskDAO.update(currentTask);
+                        
+                        if (success[0] && switchRecurrence != null && switchRecurrence.isChecked()) {
+                            // Delete old recurrence and save new one
+                            taskRecurrenceDAO.deleteByTaskId(currentTask.getId());
+                            saveRecurrence(currentTask.getId());
+                        }
+                        break;
+                }
+            } else {
+                // Normal task or instance, just update
+                currentTask.setTitle(title);
+                currentTask.setDescription(description.isEmpty() ? null : description);
+                currentTask.setPriority(priorityValues[priorityIndex]);
+                currentTask.setStatus(statusValues[statusIndex]);
+                currentTask.setDueDate(dueDateForDb[0]);
+                success[0] = taskDAO.update(currentTask);
                 
-                // Delete all old recurring instances (tasks with same title and user_id that are not the original)
-                // Note: This is a simple approach - in production, you might want to track parent task ID
-                if (switchRecurrence != null && switchRecurrence.isChecked()) {
+                if (success[0] && switchRecurrence != null && switchRecurrence.isChecked()) {
+                    // Make it a master task
+                    currentTask.setIsMaster(true);
+                    taskDAO.update(currentTask);
                     saveRecurrence(currentTask.getId());
                 }
-                
+            }
+            
+            // Handle reminders (for all cases)
+            if (success[0]) {
                 // Tags removed - no longer supported
 
                 // Delete old reminders and insert new one
@@ -800,7 +931,7 @@ public class EditTaskActivity extends AppCompatActivity {
             mainHandler.post(() -> {
                 showLoading(false);
 
-                if (success) {
+                if (success[0]) {
                     Toast.makeText(this, getString(R.string.success_task_updated), Toast.LENGTH_SHORT).show();
                     setResult(RESULT_OK);
                     finish();
@@ -887,9 +1018,8 @@ public class EditTaskActivity extends AppCompatActivity {
         
         taskRecurrenceDAO.insert(recurrence);
         
-        // Generate all recurring instances immediately
-        TaskRecurrenceService recurrenceService = new TaskRecurrenceService();
-        recurrenceService.generateAllRecurringInstances(recurrence);
+        // Note: Không còn generate instances ngay lập tức
+        // Instances sẽ được generate động khi hiển thị trong MainActivity
     }
 
     private void showLoading(boolean show) {

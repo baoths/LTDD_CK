@@ -100,7 +100,7 @@ public class TaskDAO {
             return -1;
         }
 
-        String sql = "INSERT INTO tasks (user_id, category_id, title, description, status, priority, due_date, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO tasks (user_id, category_id, title, description, status, priority, due_date, start_date, end_date, parent_task_id, is_master, occurrence_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (PreparedStatement stmt = conn.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
             stmt.setInt(1, task.getUserId());
@@ -117,6 +117,14 @@ public class TaskDAO {
             stmt.setString(7, task.getDueDate());
             stmt.setString(8, task.getStartDate());
             stmt.setString(9, task.getEndDate());
+            // Handle nullable fields
+            if (task.getParentTaskId() != null) {
+                stmt.setInt(10, task.getParentTaskId());
+            } else {
+                stmt.setNull(10, java.sql.Types.INTEGER);
+            }
+            stmt.setBoolean(11, task.getIsMaster() != null ? task.getIsMaster() : false);
+            stmt.setString(12, task.getOccurrenceDate());
 
             int rowsAffected = stmt.executeUpdate();
             if (rowsAffected > 0) {
@@ -228,7 +236,7 @@ public class TaskDAO {
             return false;
         }
 
-        String sql = "UPDATE tasks SET title = ?, description = ?, status = ?, priority = ?, due_date = ?, start_date = ?, end_date = ? WHERE id = ?";
+        String sql = "UPDATE tasks SET title = ?, description = ?, status = ?, priority = ?, due_date = ?, start_date = ?, end_date = ?, parent_task_id = ?, is_master = ?, occurrence_date = ? WHERE id = ?";
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, task.getTitle());
@@ -238,7 +246,15 @@ public class TaskDAO {
             stmt.setString(5, task.getDueDate());
             stmt.setString(6, task.getStartDate());
             stmt.setString(7, task.getEndDate());
-            stmt.setInt(8, task.getId());
+            // Handle nullable fields
+            if (task.getParentTaskId() != null) {
+                stmt.setInt(8, task.getParentTaskId());
+            } else {
+                stmt.setNull(8, java.sql.Types.INTEGER);
+            }
+            stmt.setBoolean(9, task.getIsMaster() != null ? task.getIsMaster() : false);
+            stmt.setString(10, task.getOccurrenceDate());
+            stmt.setInt(11, task.getId());
 
             int rowsAffected = stmt.executeUpdate();
             return rowsAffected > 0;
@@ -373,6 +389,36 @@ public class TaskDAO {
     }
 
     /**
+     * Đếm số lượng task đang sử dụng một category.
+     *
+     * @param categoryId ID của category
+     * @return Số lượng task đang sử dụng category này
+     */
+    public int countByCategoryId(int categoryId) {
+        Connection conn = dbHelper.getConnection();
+        if (conn == null) {
+            Log.e(TAG, "Không thể kết nối database");
+            return 0;
+        }
+
+        String sql = "SELECT COUNT(*) as count FROM tasks WHERE category_id = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, categoryId);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                return rs.getInt("count");
+            }
+        } catch (SQLException e) {
+            Log.e(TAG, "Lỗi đếm task theo category: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return 0;
+    }
+
+    /**
      * Lấy tasks theo trạng thái.
      *
      * @param userId ID của user
@@ -435,7 +481,97 @@ public class TaskDAO {
             // Column may not exist yet, set to null
             task.setEndDate(null);
         }
+        // Handle new recurrence fields
+        try {
+            int parentTaskId = rs.getInt("parent_task_id");
+            if (!rs.wasNull()) {
+                task.setParentTaskId(parentTaskId);
+            }
+        } catch (SQLException e) {
+            // Column may not exist yet, set to null
+            task.setParentTaskId(null);
+        }
+        try {
+            task.setIsMaster(rs.getBoolean("is_master"));
+        } catch (SQLException e) {
+            // Column may not exist yet, set to false
+            task.setIsMaster(false);
+        }
+        try {
+            task.setOccurrenceDate(rs.getString("occurrence_date"));
+        } catch (SQLException e) {
+            // Column may not exist yet, set to null
+            task.setOccurrenceDate(null);
+        }
         task.setCreatedAt(rs.getString("created_at"));
         return task;
+    }
+
+    /**
+     * Lấy tất cả master tasks của một user (không phải instances).
+     *
+     * @param userId ID của user
+     * @return Danh sách master Task
+     */
+    public List<Task> findMasterTasks(int userId) {
+        List<Task> tasks = new ArrayList<>();
+        Connection conn = dbHelper.getConnection();
+
+        if (conn == null) {
+            Log.e(TAG, "Không thể kết nối database");
+            return tasks;
+        }
+
+        String sql = "SELECT * FROM tasks WHERE user_id = ? AND (is_master = TRUE OR is_master IS NULL) AND parent_task_id IS NULL ORDER BY created_at DESC";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, userId);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                tasks.add(mapResultSetToTask(rs));
+            }
+        } catch (SQLException e) {
+            Log.e(TAG, "Lỗi lấy danh sách master tasks: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return tasks;
+    }
+
+    /**
+     * Lấy instances của một master task trong date range.
+     *
+     * @param masterTaskId ID của master task
+     * @param startDate    Ngày bắt đầu (yyyy-MM-dd)
+     * @param endDate      Ngày kết thúc (yyyy-MM-dd)
+     * @return Danh sách Task instances
+     */
+    public List<Task> findInstancesByMasterId(int masterTaskId, String startDate, String endDate) {
+        List<Task> tasks = new ArrayList<>();
+        Connection conn = dbHelper.getConnection();
+
+        if (conn == null) {
+            Log.e(TAG, "Không thể kết nối database");
+            return tasks;
+        }
+
+        String sql = "SELECT * FROM tasks WHERE parent_task_id = ? AND occurrence_date >= ? AND occurrence_date <= ? ORDER BY occurrence_date ASC";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, masterTaskId);
+            stmt.setString(2, startDate);
+            stmt.setString(3, endDate);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                tasks.add(mapResultSetToTask(rs));
+            }
+        } catch (SQLException e) {
+            Log.e(TAG, "Lỗi lấy instances theo master task: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return tasks;
     }
 }

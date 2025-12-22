@@ -20,6 +20,9 @@ public class Task {
     private String dueDate;
     private String startDate; // Start date for recurring tasks (yyyy-MM-dd)
     private String endDate; // End date for recurring tasks (yyyy-MM-dd)
+    private Integer parentTaskId; // ID of master task (NULL if master, has value if instance)
+    private Boolean isMaster; // TRUE if this is a master/recurring task, FALSE if instance
+    private String occurrenceDate; // Date of occurrence for this instance (NULL if master)
     private String createdAt;
 
     // Status constants
@@ -135,6 +138,30 @@ public class Task {
 
     public void setEndDate(String endDate) {
         this.endDate = endDate;
+    }
+
+    public Integer getParentTaskId() {
+        return parentTaskId;
+    }
+
+    public void setParentTaskId(Integer parentTaskId) {
+        this.parentTaskId = parentTaskId;
+    }
+
+    public Boolean getIsMaster() {
+        return isMaster != null ? isMaster : false;
+    }
+
+    public void setIsMaster(Boolean isMaster) {
+        this.isMaster = isMaster;
+    }
+
+    public String getOccurrenceDate() {
+        return occurrenceDate;
+    }
+
+    public void setOccurrenceDate(String occurrenceDate) {
+        this.occurrenceDate = occurrenceDate;
     }
 
     public String getCreatedAt() {

@@ -64,6 +64,18 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <!-- Edit Category Activity -->
+        <activity
+            android:name=".EditCategoryActivity"
+            android:exported="false"
+            android:parentActivityName=".CategoryManagementActivity" />
+
+        <!-- Category Management Activity -->
+        <activity
+            android:name=".CategoryManagementActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity" />
+
     </application>
 
 </manifest>

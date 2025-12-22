@@ -16,6 +16,10 @@ public class TaskDTO {
     private String dueDate;
     private String startDate; // Start date for recurring tasks
     private String endDate; // End date for recurring tasks
+    private Integer parentTaskId; // ID of master task (NULL if master, has value if instance)
+    private Boolean isRecurringMaster; // TRUE if this is a master/recurring task
+    private String occurrenceDate; // Date of occurrence for this instance (NULL if master)
+    private String recurrenceInfo; // Human-readable recurrence info (e.g., "Mỗi thứ 2, 4, 6")
     private String createdAt;
     private String ownerName; // Thông tin bổ sung: tên người sở hữu task
     private int categoryId; // ID của category
@@ -178,6 +182,38 @@ public class TaskDTO {
 
     public void setEndDate(String endDate) {
         this.endDate = endDate;
+    }
+
+    public Integer getParentTaskId() {
+        return parentTaskId;
+    }
+
+    public void setParentTaskId(Integer parentTaskId) {
+        this.parentTaskId = parentTaskId;
+    }
+
+    public Boolean getIsRecurringMaster() {
+        return isRecurringMaster != null ? isRecurringMaster : false;
+    }
+
+    public void setIsRecurringMaster(Boolean isRecurringMaster) {
+        this.isRecurringMaster = isRecurringMaster;
+    }
+
+    public String getOccurrenceDate() {
+        return occurrenceDate;
+    }
+
+    public void setOccurrenceDate(String occurrenceDate) {
+        this.occurrenceDate = occurrenceDate;
+    }
+
+    public String getRecurrenceInfo() {
+        return recurrenceInfo;
+    }
+
+    public void setRecurrenceInfo(String recurrenceInfo) {
+        this.recurrenceInfo = recurrenceInfo;
     }
 
     @Override

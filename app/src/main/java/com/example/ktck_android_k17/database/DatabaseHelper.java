@@ -190,6 +190,18 @@ public class DatabaseHelper {
             verifyTableExists(conn, "task_recurrence");
             Log.d(TAG, "✓ Bảng task_recurrence OK");
 
+            // Tạo bảng task_exceptions nếu chưa tồn tại
+            Log.d(TAG, "Đang tạo bảng task_exceptions...");
+            createTaskExceptionsTableIfNotExists(conn);
+            verifyTableExists(conn, "task_exceptions");
+            Log.d(TAG, "✓ Bảng task_exceptions OK");
+
+            // Migration: Thêm các cột mới vào bảng tasks
+            migrateTasksTableAddRecurrenceFields(conn);
+
+            // Run recurrence migration (one-time, checks if needed)
+            runRecurrenceMigrationIfNeeded(conn);
+
             Log.d(TAG, "✓✓✓ Tất cả các bảng đã được khởi tạo thành công! ✓✓✓");
 
         } catch (SQLException e) {
@@ -527,6 +539,166 @@ public class DatabaseHelper {
             e.printStackTrace();
         } catch (Exception e) {
             Log.e(TAG, "Lỗi không mong đợi khi migration bảng tasks (start_date/end_date): " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Tạo bảng task_exceptions nếu chưa tồn tại.
+     */
+    private void createTaskExceptionsTableIfNotExists(Connection conn) throws SQLException {
+        String sql = "CREATE TABLE IF NOT EXISTS task_exceptions (" +
+                "id INT AUTO_INCREMENT PRIMARY KEY," +
+                "master_task_id INT NOT NULL," +
+                "original_occurrence_date DATE NOT NULL," +
+                "exception_type VARCHAR(20) NOT NULL," +
+                "modified_task_id INT," +
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                "FOREIGN KEY (master_task_id) REFERENCES tasks(id) ON DELETE CASCADE," +
+                "FOREIGN KEY (modified_task_id) REFERENCES tasks(id) ON DELETE SET NULL," +
+                "UNIQUE KEY unique_exception (master_task_id, original_occurrence_date)" +
+                ")";
+
+        try (java.sql.Statement stmt = conn.createStatement()) {
+            boolean result = stmt.execute(sql);
+            Log.d(TAG, "CREATE TABLE task_exceptions executed. Result: " + result);
+            Log.d(TAG, "Bảng task_exceptions đã được tạo hoặc đã tồn tại");
+        } catch (SQLException e) {
+            Log.e(TAG, "Lỗi khi tạo bảng task_exceptions: " + e.getMessage());
+            Log.e(TAG, "SQL State: " + e.getSQLState());
+            throw e;
+        }
+    }
+
+    /**
+     * Migration: Thêm các cột parent_task_id, is_master, occurrence_date vào bảng tasks nếu chưa có.
+     */
+    private void migrateTasksTableAddRecurrenceFields(Connection conn) {
+        try {
+            // Kiểm tra và thêm parent_task_id
+            String checkParentTaskIdSql = "SELECT COUNT(*) as count FROM INFORMATION_SCHEMA.COLUMNS " +
+                    "WHERE TABLE_SCHEMA = DATABASE() " +
+                    "AND TABLE_NAME = 'tasks' " +
+                    "AND COLUMN_NAME = 'parent_task_id'";
+
+            try (java.sql.Statement stmt = conn.createStatement();
+                 java.sql.ResultSet rs = stmt.executeQuery(checkParentTaskIdSql)) {
+                
+                if (rs.next() && rs.getInt("count") == 0) {
+                    Log.d(TAG, "⚠ Cột parent_task_id chưa tồn tại, đang thêm vào bảng tasks...");
+                    
+                    String alterSql = "ALTER TABLE tasks ADD COLUMN parent_task_id INT NULL";
+                    try (java.sql.Statement alterStmt = conn.createStatement()) {
+                        alterStmt.execute(alterSql);
+                        Log.d(TAG, "✓ Đã thêm cột parent_task_id vào bảng tasks");
+                    } catch (SQLException alterError) {
+                        Log.e(TAG, "Lỗi khi thêm cột parent_task_id: " + alterError.getMessage());
+                    }
+                    
+                    // Thêm foreign key constraint
+                    try {
+                        String addFkSql = "ALTER TABLE tasks " +
+                                "ADD CONSTRAINT fk_tasks_parent_task " +
+                                "FOREIGN KEY (parent_task_id) REFERENCES tasks(id) ON DELETE CASCADE";
+                        try (java.sql.Statement fkStmt = conn.createStatement()) {
+                            fkStmt.execute(addFkSql);
+                            Log.d(TAG, "✓ Đã thêm foreign key constraint cho parent_task_id");
+                        }
+                    } catch (SQLException fkError) {
+                        String errorMsg = fkError.getMessage().toLowerCase();
+                        if (!errorMsg.contains("duplicate key") && 
+                            !errorMsg.contains("already exists")) {
+                            Log.w(TAG, "Không thể thêm foreign key constraint cho parent_task_id: " + fkError.getMessage());
+                        }
+                    }
+                } else {
+                    Log.d(TAG, "✓ Cột parent_task_id đã tồn tại trong bảng tasks");
+                }
+            }
+
+            // Kiểm tra và thêm is_master
+            String checkIsMasterSql = "SELECT COUNT(*) as count FROM INFORMATION_SCHEMA.COLUMNS " +
+                    "WHERE TABLE_SCHEMA = DATABASE() " +
+                    "AND TABLE_NAME = 'tasks' " +
+                    "AND COLUMN_NAME = 'is_master'";
+
+            try (java.sql.Statement stmt = conn.createStatement();
+                 java.sql.ResultSet rs = stmt.executeQuery(checkIsMasterSql)) {
+                
+                if (rs.next() && rs.getInt("count") == 0) {
+                    Log.d(TAG, "⚠ Cột is_master chưa tồn tại, đang thêm vào bảng tasks...");
+                    
+                    String alterSql = "ALTER TABLE tasks ADD COLUMN is_master BOOLEAN DEFAULT FALSE";
+                    try (java.sql.Statement alterStmt = conn.createStatement()) {
+                        alterStmt.execute(alterSql);
+                        Log.d(TAG, "✓ Đã thêm cột is_master vào bảng tasks");
+                    } catch (SQLException alterError) {
+                        Log.e(TAG, "Lỗi khi thêm cột is_master: " + alterError.getMessage());
+                    }
+                } else {
+                    Log.d(TAG, "✓ Cột is_master đã tồn tại trong bảng tasks");
+                }
+            }
+
+            // Kiểm tra và thêm occurrence_date
+            String checkOccurrenceDateSql = "SELECT COUNT(*) as count FROM INFORMATION_SCHEMA.COLUMNS " +
+                    "WHERE TABLE_SCHEMA = DATABASE() " +
+                    "AND TABLE_NAME = 'tasks' " +
+                    "AND COLUMN_NAME = 'occurrence_date'";
+
+            try (java.sql.Statement stmt = conn.createStatement();
+                 java.sql.ResultSet rs = stmt.executeQuery(checkOccurrenceDateSql)) {
+                
+                if (rs.next() && rs.getInt("count") == 0) {
+                    Log.d(TAG, "⚠ Cột occurrence_date chưa tồn tại, đang thêm vào bảng tasks...");
+                    
+                    String alterSql = "ALTER TABLE tasks ADD COLUMN occurrence_date DATE NULL";
+                    try (java.sql.Statement alterStmt = conn.createStatement()) {
+                        alterStmt.execute(alterSql);
+                        Log.d(TAG, "✓ Đã thêm cột occurrence_date vào bảng tasks");
+                    } catch (SQLException alterError) {
+                        Log.e(TAG, "Lỗi khi thêm cột occurrence_date: " + alterError.getMessage());
+                    }
+                } else {
+                    Log.d(TAG, "✓ Cột occurrence_date đã tồn tại trong bảng tasks");
+                }
+            }
+        } catch (SQLException e) {
+            Log.e(TAG, "Lỗi khi migration bảng tasks (recurrence fields): " + e.getMessage());
+            Log.e(TAG, "SQL State: " + e.getSQLState());
+            e.printStackTrace();
+        } catch (Exception e) {
+            Log.e(TAG, "Lỗi không mong đợi khi migration bảng tasks (recurrence fields): " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Chạy migration recurring tasks một lần nếu cần.
+     * Kiểm tra xem đã migration chưa bằng cách kiểm tra một master task có is_master = TRUE.
+     */
+    private void runRecurrenceMigrationIfNeeded(Connection conn) {
+        try {
+            // Kiểm tra xem đã có master task nào chưa
+            String checkSql = "SELECT COUNT(*) as count FROM tasks WHERE is_master = TRUE LIMIT 1";
+            try (java.sql.Statement stmt = conn.createStatement();
+                 java.sql.ResultSet rs = stmt.executeQuery(checkSql)) {
+                
+                if (rs.next() && rs.getInt("count") > 0) {
+                    Log.d(TAG, "Recurrence migration đã được chạy trước đó, bỏ qua");
+                    return;
+                }
+            }
+
+            // Chưa migration, chạy migration
+            Log.d(TAG, "Chạy recurrence migration...");
+            com.example.ktck_android_k17.service.RecurrenceMigrationService migrationService = 
+                new com.example.ktck_android_k17.service.RecurrenceMigrationService();
+            migrationService.migrateExistingRecurringTasks();
+            Log.d(TAG, "Recurrence migration hoàn tất");
+
+        } catch (Exception e) {
+            Log.e(TAG, "Lỗi khi chạy recurrence migration: " + e.getMessage());
             e.printStackTrace();
         }
     }

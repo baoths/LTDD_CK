@@ -92,6 +92,11 @@ public class TaskAdapter {
         dto.setStartDate(task.getStartDate());
         dto.setEndDate(task.getEndDate());
         
+        // Set recurring task fields
+        dto.setParentTaskId(task.getParentTaskId());
+        dto.setIsRecurringMaster(task.getIsMaster());
+        dto.setOccurrenceDate(task.getOccurrenceDate());
+        
         return dto;
     }
 
@@ -115,6 +120,9 @@ public class TaskAdapter {
                 task.getDueDate());
         dto.setStartDate(task.getStartDate());
         dto.setEndDate(task.getEndDate());
+        dto.setParentTaskId(task.getParentTaskId());
+        dto.setIsRecurringMaster(task.getIsMaster());
+        dto.setOccurrenceDate(task.getOccurrenceDate());
         return dto;
     }
 

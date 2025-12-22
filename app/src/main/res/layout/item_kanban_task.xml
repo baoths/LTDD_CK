@@ -63,16 +63,6 @@
         </LinearLayout>
 
         <!-- Due Date -->
-        <TextView
-            android:id="@+id/tvDueDate"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textColor="@color/text_secondary"
-            android:textSize="11sp"
-            android:drawableStart="@android:drawable/ic_menu_today"
-            android:drawablePadding="4dp"
-            android:gravity="center_vertical" />
 
         <!-- End Date -->
         <TextView

@@ -86,7 +86,19 @@
             android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_add"
-            android:contentDescription="Thêm danh mục mới"
+            android:contentDescription="Thêm danh mục mới (Giữ để quản lý)"
+            app:tint="@color/primary"
+            app:layout_constraintEnd_toStartOf="@id/btnManageCategory"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+        <ImageButton
+            android:id="@+id/btnManageCategory"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_edit"
+            android:contentDescription="Quản lý danh mục"
             app:tint="@color/primary"
             app:layout_constraintEnd_toStartOf="@id/btnToggleView"
             app:layout_constraintTop_toTopOf="parent"
@@ -97,9 +109,9 @@
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_user"
+            android:src="@drawable/ic_view_module"
             android:contentDescription="Chuyển đổi giữa danh sách và Kanban"
-            app:tint="@color/white"
+            app:tint="@color/primary"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent" />

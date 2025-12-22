@@ -53,7 +53,7 @@ public class MainActivity extends AppCompatActivity implements TaskListAdapter.O
     private static final String KEY_EMAIL = "email";
 
     private TextView tvWelcome, tvTaskCount;
-    private ImageButton btnLogout, btnAddCategory, btnToggleView;
+    private ImageButton btnLogout, btnAddCategory, btnManageCategory, btnToggleView;
     private RecyclerView rvTasks;
     private RecyclerView rvKanbanPending, rvKanbanInProgress, rvKanbanCompleted;
     private android.widget.HorizontalScrollView kanbanScrollView;
@@ -121,6 +121,7 @@ public class MainActivity extends AppCompatActivity implements TaskListAdapter.O
             tvTaskCount = findViewById(R.id.tvTaskCount);
             btnLogout = findViewById(R.id.btnLogout);
             btnAddCategory = findViewById(R.id.btnAddCategory);
+            btnManageCategory = findViewById(R.id.btnManageCategory);
             btnToggleView = findViewById(R.id.btnToggleView);
             rvTasks = findViewById(R.id.rvTasks);
             kanbanScrollView = findViewById(R.id.kanbanScrollView);
@@ -520,6 +521,17 @@ public class MainActivity extends AppCompatActivity implements TaskListAdapter.O
     private void toggleView(boolean showKanban) {
         isKanbanView = showKanban;
         
+        // Cập nhật icon dựa trên trạng thái view
+        if (btnToggleView != null) {
+            if (showKanban) {
+                // Đang ở Kanban view, hiển thị icon list để chuyển sang list view
+                btnToggleView.setImageResource(R.drawable.ic_view_list);
+            } else {
+                // Đang ở List view, hiển thị icon grid để chuyển sang Kanban view
+                btnToggleView.setImageResource(R.drawable.ic_view_module);
+            }
+        }
+        
         if (showKanban) {
             if (rvTasks != null) rvTasks.setVisibility(View.GONE);
             if (kanbanScrollView != null) kanbanScrollView.setVisibility(View.VISIBLE);
@@ -595,6 +607,7 @@ public class MainActivity extends AppCompatActivity implements TaskListAdapter.O
             }
 
             if (btnAddCategory != null) {
+                // Click để thêm category mới
                 btnAddCategory.setOnClickListener(v -> {
                     try {
                         Intent intent = new Intent(MainActivity.this, AddCategoryActivity.class);
@@ -602,6 +615,19 @@ public class MainActivity extends AppCompatActivity implements TaskListAdapter.O
                     } catch (Exception e) {
                         android.util.Log.e("MainActivity", "Error navigating to AddCategoryActivity: " + e.getMessage(), e);
                         Toast.makeText(this, "Lỗi mở màn hình thêm danh mục", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+
+            if (btnManageCategory != null) {
+                // Click để mở CategoryManagementActivity
+                btnManageCategory.setOnClickListener(v -> {
+                    try {
+                        Intent intent = new Intent(MainActivity.this, CategoryManagementActivity.class);
+                        startActivityForResult(intent, 300); // Request code 300 for category management
+                    } catch (Exception e) {
+                        android.util.Log.e("MainActivity", "Error navigating to CategoryManagementActivity: " + e.getMessage(), e);
+                        Toast.makeText(MainActivity.this, "Lỗi mở màn hình quản lý danh mục", Toast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -684,35 +710,108 @@ public class MainActivity extends AppCompatActivity implements TaskListAdapter.O
 
     /**
      * Load danh sách tasks từ database.
+     * Load master tasks và generate instances động trong date range.
      */
     private void loadTasks() {
         showLoading(true);
 
         executorService.execute(() -> {
             try {
-                // Lấy danh sách tasks của user hiện tại
-                List<Task> tasks = taskDAO.findByUserId(currentUser.getId());
+                // Calculate date range (default: 1 month before and after today)
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault());
+                java.util.Calendar cal = java.util.Calendar.getInstance();
+                String today = sdf.format(cal.getTime());
+                
+                cal.add(java.util.Calendar.MONTH, -1);
+                String startDate = sdf.format(cal.getTime());
+                
+                cal.add(java.util.Calendar.MONTH, 2); // +1 month from today
+                String endDate = sdf.format(cal.getTime());
+
+                // Lấy master tasks của user hiện tại
+                List<Task> masterTasks = taskDAO.findMasterTasks(currentUser.getId());
 
                 // Filter by category if selected
                 int selectedCategoryId = getSelectedCategoryId();
                 if (selectedCategoryId > 0) {
                     List<Task> filteredTasks = new ArrayList<>();
-                    for (Task task : tasks) {
+                    for (Task task : masterTasks) {
                         if (task.getCategoryId() == selectedCategoryId) {
                             filteredTasks.add(task);
                         }
                     }
-                    tasks = filteredTasks;
+                    masterTasks = filteredTasks;
                 }
 
-                // Chuyển đổi sang DTOs sử dụng TaskAdapter
-                List<TaskDTO> taskDTOs = TaskAdapter.toDTOList(tasks, currentUser.getUsername());
+                // Generate instances cho recurring tasks và merge với master tasks
+                List<TaskDTO> allTaskDTOs = new ArrayList<>();
+                com.example.ktck_android_k17.dao.TaskRecurrenceDAO recurrenceDAO = 
+                    new com.example.ktck_android_k17.dao.TaskRecurrenceDAO();
+                
+                for (Task masterTask : masterTasks) {
+                    // Check if this master task has recurrence
+                    com.example.ktck_android_k17.model.TaskRecurrence recurrence = 
+                        recurrenceDAO.findByTaskId(masterTask.getId());
+                    
+                    if (recurrence != null && recurrence.isActive()) {
+                        // Generate instances in date range
+                        List<TaskDTO> instances = recurrenceService.generateInstancesInRange(masterTask, startDate, endDate);
+                        allTaskDTOs.addAll(instances);
+                        
+                        // Also add master task itself with recurrence info
+                        TaskDTO masterDTO = TaskAdapter.toDTO(masterTask, currentUser.getUsername());
+                        masterDTO.setIsRecurringMaster(true);
+                        // Set recurrence info
+                        String recurrenceInfo = formatRecurrenceInfoForDisplay(recurrence);
+                        masterDTO.setRecurrenceInfo(recurrenceInfo);
+                        allTaskDTOs.add(masterDTO);
+                    } else {
+                        // Not a recurring task, add master task directly
+                        TaskDTO dto = TaskAdapter.toDTO(masterTask, currentUser.getUsername());
+                        dto.setIsRecurringMaster(false);
+                        allTaskDTOs.add(dto);
+                    }
+                }
+
+                // Also load non-master tasks (instances that were created before migration or exceptions)
+                List<Task> allUserTasks = taskDAO.findByUserId(currentUser.getId());
+                for (Task task : allUserTasks) {
+                    // Skip if already included as master or instance
+                    boolean alreadyIncluded = false;
+                    for (TaskDTO dto : allTaskDTOs) {
+                        if (dto.getId() == task.getId()) {
+                            alreadyIncluded = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!alreadyIncluded && (task.getIsMaster() == null || !task.getIsMaster())) {
+                        // This is a standalone task or old instance, add it
+                        TaskDTO dto = TaskAdapter.toDTO(task, currentUser.getUsername());
+                        allTaskDTOs.add(dto);
+                    }
+                }
+
+                // Filter by category again if needed (for instances)
+                final List<TaskDTO> finalTaskDTOs;
+                if (selectedCategoryId > 0) {
+                    List<TaskDTO> filteredDTOs = new ArrayList<>();
+                    for (TaskDTO dto : allTaskDTOs) {
+                        if (dto.getCategoryId() == selectedCategoryId) {
+                            filteredDTOs.add(dto);
+                        }
+                    }
+                    finalTaskDTOs = filteredDTOs;
+                } else {
+                    finalTaskDTOs = allTaskDTOs;
+                }
 
                 mainHandler.post(() -> {
                     showLoading(false);
-                    updateUI(taskDTOs);
+                    updateUI(finalTaskDTOs);
                 });
             } catch (Exception e) {
+                android.util.Log.e("MainActivity", "Lỗi load tasks: " + e.getMessage(), e);
                 mainHandler.post(() -> {
                     showLoading(false);
                     Toast.makeText(MainActivity.this,
@@ -723,7 +822,7 @@ public class MainActivity extends AppCompatActivity implements TaskListAdapter.O
     }
 
     /**
-     * Cập nhật UI với danh sách tasks.
+
      *
      * @param tasks Danh sách TaskDTO
      */
@@ -888,11 +987,7 @@ public class MainActivity extends AppCompatActivity implements TaskListAdapter.O
         finish();
     }
 
-    /**
-     * Hiển thị/ẩn loading indicator.
-     *
-     * @param show true để hiển thị
-     */
+
     private void showLoading(boolean show) {
         progressBar.setVisibility(show ? View.VISIBLE : View.GONE);
     }
@@ -900,6 +995,20 @@ public class MainActivity extends AppCompatActivity implements TaskListAdapter.O
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        // Nếu thêm hoặc chỉnh sửa task thành công, reload danh sách
+        if (requestCode == 100 && resultCode == RESULT_OK) {
+            loadTasks();
+        }
+        // Nếu thêm category thành công, reload categories và tasks
+        if (requestCode == 200 && resultCode == RESULT_OK) {
+            loadCategories();
+            loadTasks();
+        }
+        // Nếu quản lý category thành công, reload categories và tasks
+        if (requestCode == 300 && resultCode == RESULT_OK) {
+            loadCategories();
+            loadTasks();
+        }
         // Nếu thêm hoặc chỉnh sửa task thành công, reload danh sách
         if (requestCode == 100 && resultCode == RESULT_OK) {
             loadTasks();
@@ -917,6 +1026,47 @@ public class MainActivity extends AppCompatActivity implements TaskListAdapter.O
         // Reload tasks khi quay lại màn hình
         if (currentUser != null) {
             loadTasks();
+        }
+    }
+
+    /**
+     * Format recurrence info thành chuỗi dễ đọc (helper method).
+     */
+    private String formatRecurrenceInfoForDisplay(com.example.ktck_android_k17.model.TaskRecurrence recurrence) {
+        if (recurrence == null) return "";
+        
+        String type = recurrence.getRecurrenceType();
+        int interval = recurrence.getRecurrenceInterval();
+        
+        switch (type) {
+            case com.example.ktck_android_k17.model.TaskRecurrence.TYPE_DAILY:
+                return interval == 1 ? "Hàng ngày" : "Mỗi " + interval + " ngày";
+            case com.example.ktck_android_k17.model.TaskRecurrence.TYPE_WEEKLY:
+                if (recurrence.getRecurrenceDays() != null && !recurrence.getRecurrenceDays().isEmpty()) {
+                    String[] days = recurrence.getRecurrenceDays().split(",");
+                    String[] dayNames = {"Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"};
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < days.length; i++) {
+                        if (i > 0) sb.append(", ");
+                        int dayNum = Integer.parseInt(days[i].trim());
+                        if (dayNum >= 1 && dayNum <= 7) {
+                            sb.append(dayNames[dayNum - 1]);
+                        }
+                    }
+                    return "Mỗi " + sb.toString();
+                } else {
+                    return interval == 1 ? "Hàng tuần" : "Mỗi " + interval + " tuần";
+                }
+            case com.example.ktck_android_k17.model.TaskRecurrence.TYPE_MONTHLY:
+                if (recurrence.getRecurrenceDayOfMonth() != null) {
+                    return "Ngày " + recurrence.getRecurrenceDayOfMonth() + " hàng tháng";
+                } else {
+                    return interval == 1 ? "Hàng tháng" : "Mỗi " + interval + " tháng";
+                }
+            case com.example.ktck_android_k17.model.TaskRecurrence.TYPE_CUSTOM:
+                return "Tùy chỉnh";
+            default:
+                return "Lặp lại";
         }
     }
 
