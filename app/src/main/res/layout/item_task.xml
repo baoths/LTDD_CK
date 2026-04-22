@@ -1,176 +1,171 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.cardview.widget.CardView 
+<androidx.cardview.widget.CardView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="12dp"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="4dp"
-    app:cardBackgroundColor="@color/card_background">
+    android:layout_marginBottom="10dp"
+    app:cardBackgroundColor="#FCFFFFFF"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="5dp"
+    app:cardUseCompatPadding="true">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp">
+        android:paddingStart="14dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="14dp">
 
-        <!-- Status Indicator -->
         <View
             android:id="@+id/viewStatusIndicator"
-            android:layout_width="4dp"
+            android:layout_width="6dp"
             android:layout_height="0dp"
             android:background="@color/status_pending"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Task Title -->
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip_soft"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp"
+            android:text="@string/status_pending"
+            android:textColor="@color/status_pending"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/tvPriority"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_chip_soft"
+            android:paddingStart="8dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="3dp"
+            android:text="Cao"
+            android:textColor="@color/white"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvStatus" />
+
         <TextView
             android:id="@+id/tvTaskTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="10dp"
+            android:ellipsize="end"
+            android:maxLines="2"
             android:text="Task Title"
             android:textColor="@color/text_primary"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:maxLines="2"
-            android:ellipsize="end"
             app:layout_constraintEnd_toStartOf="@id/tvStatus"
             app:layout_constraintStart_toEndOf="@id/viewStatusIndicator"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Task Description -->
         <TextView
             android:id="@+id/tvTaskDescription"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:layout_marginEnd="8dp"
+            android:ellipsize="end"
+            android:maxLines="2"
             android:text="Task description goes here..."
             android:textColor="@color/text_secondary"
-            android:textSize="14sp"
-            android:maxLines="2"
-            android:ellipsize="end"
-            app:layout_constraintEnd_toStartOf="@id/tvStatus"
+            android:textSize="13sp"
+            app:layout_constraintEnd_toStartOf="@id/tvPriority"
             app:layout_constraintStart_toStartOf="@id/tvTaskTitle"
             app:layout_constraintTop_toBottomOf="@id/tvTaskTitle" />
 
-        <!-- Category -->
         <TextView
             android:id="@+id/tvCategory"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:layout_marginEnd="8dp"
             android:text="Danh mục"
             android:textColor="@color/text_hint"
             android:textSize="12sp"
             android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="@id/tvTaskTitle"
             app:layout_constraintTop_toBottomOf="@id/tvTaskDescription" />
 
-        <!-- Due Date -->
         <TextView
             android:id="@+id/tvDueDate"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="4dp"
             android:text="Due: 2024-01-01"
             android:textColor="@color/text_hint"
             android:textSize="12sp"
-            app:layout_constraintStart_toEndOf="@id/tvCategory"
-            app:layout_constraintTop_toBottomOf="@id/tvTaskDescription" />
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="@id/tvTaskTitle"
+            app:layout_constraintTop_toBottomOf="@id/tvCategory" />
 
-        <!-- End Date -->
         <TextView
             android:id="@+id/tvEndDate"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginTop="4dp"
             android:text="Kết thúc: 2024-01-01"
             android:textColor="@color/text_hint"
             android:textSize="12sp"
             android:visibility="gone"
-            app:layout_constraintStart_toEndOf="@id/tvDueDate"
-            app:layout_constraintTop_toBottomOf="@id/tvTaskDescription" />
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="@id/tvTaskTitle"
+            app:layout_constraintTop_toBottomOf="@id/tvDueDate" />
 
-        <!-- Overdue Warning -->
         <TextView
             android:id="@+id/tvOverdueWarning"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginTop="4dp"
             android:text="⚠ Quá hạn"
             android:textColor="@android:color/holo_red_dark"
             android:textSize="12sp"
             android:textStyle="bold"
             android:visibility="gone"
-            app:layout_constraintStart_toEndOf="@id/tvEndDate"
-            app:layout_constraintTop_toBottomOf="@id/tvTaskDescription" />
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="@id/tvTaskTitle"
+            app:layout_constraintTop_toBottomOf="@id/tvEndDate" />
 
-        <!-- Reminder -->
         <TextView
             android:id="@+id/tvReminder"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginTop="4dp"
             android:text="Nhắc nhở"
             android:textColor="@color/text_hint"
             android:textSize="12sp"
             android:visibility="gone"
-            app:layout_constraintStart_toEndOf="@id/tvDueDate"
-            app:layout_constraintTop_toBottomOf="@id/tvTaskDescription" />
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="@id/tvTaskTitle"
+            app:layout_constraintTop_toBottomOf="@id/tvOverdueWarning" />
 
-        <!-- Tags Container -->
         <LinearLayout
             android:id="@+id/llTags"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:orientation="horizontal"
             android:visibility="gone"
-            app:layout_constraintEnd_toStartOf="@id/tvStatus"
-            app:layout_constraintStart_toStartOf="@id/tvTaskTitle"
-            app:layout_constraintTop_toBottomOf="@id/tvDueDate" />
-
-        <!-- Priority Badge -->
-        <TextView
-            android:id="@+id/tvPriority"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingStart="8dp"
-            android:paddingTop="2dp"
-            android:paddingEnd="8dp"
-            android:paddingBottom="2dp"
-            android:layout_marginEnd="4dp"
-            android:background="@drawable/rounded_edittext"
-            android:text="Cao"
-            android:textColor="@color/white"
-            android:textSize="10sp"
-            android:textStyle="bold"
-            app:layout_constraintEnd_toStartOf="@id/tvStatus"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <!-- Status Badge -->
-        <TextView
-            android:id="@+id/tvStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingStart="12dp"
-            android:paddingTop="4dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="4dp"
-            android:background="@drawable/rounded_edittext"
-            android:text="@string/status_pending"
-            android:textColor="@color/status_pending"
-            android:textSize="12sp"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintStart_toStartOf="@id/tvTaskTitle"
+            app:layout_constraintTop_toBottomOf="@id/tvReminder" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
